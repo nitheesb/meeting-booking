@@ -1,5 +1,4 @@
-
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Room, ViewMode } from './types';
 import { INITIAL_ROOMS } from './utils';
 import { RoomDisplay } from './views/RoomDisplay/RoomDisplay';
