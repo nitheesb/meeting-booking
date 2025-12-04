@@ -1,5 +1,6 @@
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Meeting } from '../types';
 import { THEME } from '../constants';
 import { formatTime } from '../utils';
@@ -9,111 +10,226 @@ interface TimelineProps {
   now: Date;
 }
 
+// Configuration
+const START_HOUR = 7; // 7 AM
+const END_HOUR = 19;  // 7 PM
+const PX_PER_MIN = 4; // Width of 1 minute in pixels
+const MIN_BLOCK_WIDTH = 50; // Minimum width for text visibility
+
 export const Timeline: React.FC<TimelineProps> = ({ schedule, now }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const PIXELS_PER_MIN = 3; 
-  const DAY_START_HOUR = 7;
-  const DAY_END_HOUR = 19;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
 
-  // Auto-center current time
+  // 1. Calculate dimensions
+  const totalMinutes = (END_HOUR - START_HOUR) * 60;
+  const totalWidth = totalMinutes * PX_PER_MIN;
+
+  // Helper: Convert Date to pixels relative to start of day
+  const getPosition = (date: Date) => {
+    const h = date.getHours();
+    const m = date.getMinutes();
+    const minutesSinceStart = (h * 60 + m) - (START_HOUR * 60);
+    return Math.max(0, minutesSinceStart * PX_PER_MIN);
+  };
+
+  // 2. Generate Grid Lines (Every 30 mins)
+  const gridLines = [];
+  for (let i = 0; i <= totalMinutes; i += 30) {
+    const isHour = i % 60 === 0;
+    gridLines.push({
+      left: i * PX_PER_MIN,
+      label: isHour ? `${Math.floor(START_HOUR + i / 60).toString().padStart(2, '0')}:00` : null,
+      isHour
+    });
+  }
+
+  // 3. Auto-scroll logic
   useEffect(() => {
-    if (containerRef.current) {
-      const startOfDay = new Date(now);
-      startOfDay.setHours(DAY_START_HOUR, 0, 0, 0);
-      const minsSinceStart = (now.getTime() - startOfDay.getTime()) / 60000;
-      const targetScroll = (minsSinceStart * PIXELS_PER_MIN) - (window.innerWidth / 2);
-      containerRef.current.scrollTo({ left: targetScroll, behavior: 'smooth' });
+    // Only auto-scroll if the user hasn't touched the scroll recently
+    if (!isUserScrolling && scrollContainerRef.current) {
+      const currentPos = getPosition(now);
+      const containerWidth = scrollContainerRef.current.clientWidth;
+      // Center the view on "now"
+      scrollContainerRef.current.scrollTo({
+        left: currentPos - (containerWidth / 2),
+        behavior: 'smooth'
+      });
     }
-  }, [now.getMinutes()]);
+  }, [now, isUserScrolling]);
 
-  const blocks = useMemo(() => {
-    const list = [];
-    const dayStart = new Date(now); dayStart.setHours(DAY_START_HOUR, 0, 0, 0);
-    const dayEnd = new Date(now); dayEnd.setHours(DAY_END_HOUR, 0, 0, 0);
-    
-    let cursor = new Date(dayStart);
-    const sortedMeetings = [...schedule].sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
-
-    while (cursor < dayEnd) {
-      const meeting = sortedMeetings.find(m => Math.abs(m.startTime.getTime() - cursor.getTime()) < 10000);
-
-      if (meeting) {
-        const duration = (meeting.endTime.getTime() - meeting.startTime.getTime()) / 60000;
-        list.push({ type: 'meeting', start: meeting.startTime, end: meeting.endTime, duration, data: meeting });
-        cursor = new Date(meeting.endTime);
-      } else {
-        const nextMeeting = sortedMeetings.find(m => m.startTime > cursor);
-        const nextBound = nextMeeting ? nextMeeting.startTime : dayEnd;
-        let diffMins = (nextBound.getTime() - cursor.getTime()) / 60000;
-        
-        const duration = Math.min(diffMins, 15);
-        if (duration <= 0) break;
-
-        const blockEnd = new Date(cursor.getTime() + duration * 60000);
-        list.push({ type: 'free', start: new Date(cursor), end: blockEnd, duration });
-        cursor = blockEnd;
-      }
+  const handleScroll = (direction: 'left' | 'right') => {
+    if (scrollContainerRef.current) {
+      setIsUserScrolling(true);
+      const amount = direction === 'left' ? -300 : 300;
+      scrollContainerRef.current.scrollBy({ left: amount, behavior: 'smooth' });
+      // Reset user scrolling flag after animation
+      setTimeout(() => setIsUserScrolling(false), 500);
     }
-    return list;
-  }, [schedule, now]);
+  };
 
-  const startOfDay = new Date(now);
-  startOfDay.setHours(DAY_START_HOUR, 0, 0, 0);
-  const nowOffsetPx = ((now.getTime() - startOfDay.getTime()) / 60000) * PIXELS_PER_MIN;
+  const nowPos = getPosition(now);
 
   return (
-    <div style={{ height: '100px', backgroundColor: '#1a1a1a', borderTop: '1px solid #333', position: 'relative', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
+    <div style={{ 
+      height: '140px', 
+      backgroundColor: '#111', 
+      borderTop: '1px solid #333', 
+      position: 'relative', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      zIndex: 20 
+    }}>
+      
+      {/* Scroll Controls */}
+      <button 
+        onClick={() => handleScroll('left')}
+        style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0, width: '50px',
+          backgroundColor: 'rgba(0,0,0,0.5)', border: 'none', color: 'white',
+          zIndex: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+        <ChevronLeft size={32} />
+      </button>
+
+      <button 
+        onClick={() => handleScroll('right')}
+        style={{
+          position: 'absolute', right: 0, top: 0, bottom: 0, width: '50px',
+          backgroundColor: 'rgba(0,0,0,0.5)', border: 'none', color: 'white',
+          zIndex: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+        <ChevronRight size={32} />
+      </button>
+
+      {/* Scrollable Track */}
       <div 
-        ref={containerRef}
-        className="no-scrollbar"
-        style={{ flex: 1, overflowX: 'auto', display: 'flex', position: 'relative', alignItems: 'center' }}
+        ref={scrollContainerRef}
+        className="timeline-scroll-area"
+        style={{ 
+          flex: 1, 
+          overflowX: 'auto', 
+          overflowY: 'hidden',
+          position: 'relative',
+          scrollbarWidth: 'none', // Firefox
+          msOverflowStyle: 'none' // IE/Edge
+        }}
+        onTouchStart={() => setIsUserScrolling(true)}
       >
-        <style>{`.no-scrollbar::-webkit-scrollbar { display: none; }`}</style>
+        <style>{`.timeline-scroll-area::-webkit-scrollbar { display: none; }`}</style>
         
-        <div style={{ width: '50vw', flexShrink: 0 }} /> 
+        <div style={{ 
+          width: `${totalWidth}px`, 
+          height: '100%', 
+          position: 'relative',
+          backgroundColor: THEME.green // BASE LAYER: GREEN (FREE)
+        }}>
 
-        <div style={{ display: 'flex', height: '60px', position: 'relative' }}>
-            <div style={{
-                position: 'absolute', left: nowOffsetPx, top: -10, bottom: -10, width: '2px', backgroundColor: 'white', zIndex: 20,
-                boxShadow: '0 0 10px white', pointerEvents: 'none'
+          {/* LAYER 2: GRID LINES */}
+          {gridLines.map((line, i) => (
+            <div key={i} style={{
+              position: 'absolute',
+              left: `${line.left}px`,
+              top: 0,
+              bottom: 0,
+              width: '1px',
+              backgroundColor: 'rgba(0,0,0,0.15)',
+              borderRight: line.isHour ? '1px solid rgba(0,0,0,0.2)' : 'none'
             }}>
+              {line.label && (
                 <div style={{
-                    position: 'absolute', top: '-25px', left: '50%', transform: 'translateX(-50%)',
-                    backgroundColor: 'white', color: 'black', padding: '2px 6px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold'
+                  position: 'absolute',
+                  bottom: '10px',
+                  left: '5px',
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.9)',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.5)'
                 }}>
-                    {formatTime(now)}
+                  {line.label}
                 </div>
+              )}
             </div>
+          ))}
 
-            {blocks.map((block, i) => (
-                <div key={i} style={{
-                    width: block.duration * PIXELS_PER_MIN,
-                    backgroundColor: block.type === 'meeting' ? THEME.red : THEME.green,
-                    height: '100%',
-                    borderRight: '1px solid rgba(0,0,0,0.1)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'white', fontSize: '12px', flexShrink: 0,
-                    position: 'relative'
-                }}>
-                    {block.type === 'meeting' ? (
-                         block.duration > 20 ? (
-                             <div style={{ textAlign: 'center', lineHeight: 1.1 }}>
-                                 <div style={{ fontWeight: 600 }}>{formatTime(block.start)}</div>
-                                 <div style={{ opacity: 0.7 }}>-</div>
-                                 <div style={{ fontWeight: 600 }}>{formatTime(block.end)}</div>
-                             </div>
-                         ) : <span style={{ opacity: 0.5 }}>•</span>
+          {/* LAYER 3: MEETINGS (RED OVERLAY) */}
+          {schedule.map((meeting) => {
+            const startPx = getPosition(meeting.startTime);
+            const endPx = getPosition(meeting.endTime);
+            const width = Math.max(endPx - startPx, 2); // Ensure at least visible line
+            
+            // Don't render if outside our view range (07:00 - 19:00)
+            if (endPx < 0 || startPx > totalWidth) return null;
+
+            return (
+              <div key={meeting.id} style={{
+                position: 'absolute',
+                left: `${startPx}px`,
+                width: `${width}px`,
+                top: 0,
+                bottom: 0,
+                backgroundColor: THEME.red,
+                borderLeft: '1px solid rgba(255,255,255,0.2)',
+                borderRight: '1px solid rgba(255,255,255,0.2)',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                zIndex: 10
+              }}>
+                {width > MIN_BLOCK_WIDTH && (
+                  <div style={{ 
+                    color: 'white', 
+                    fontSize: '12px', 
+                    fontWeight: 600, 
+                    whiteSpace: 'nowrap',
+                    textAlign: 'center',
+                    lineHeight: 1.2
+                  }}>
+                    {width > 120 ? (
+                      <>
+                        <div style={{ opacity: 0.9 }}>{meeting.title}</div>
+                        <div style={{ opacity: 0.7, fontSize: '10px' }}>{formatTime(meeting.startTime)} - {formatTime(meeting.endTime)}</div>
+                      </>
                     ) : (
-                         (block.start.getMinutes() === 0 || block.start.getMinutes() === 30) && (
-                            <span style={{ position: 'absolute', bottom: '2px', left: '2px', fontSize: '10px', opacity: 0.8 }}>
-                                {formatTime(block.start)}
-                            </span>
-                         )
+                      <span>{formatTime(meeting.startTime)}</span>
                     )}
-                </div>
-            ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* LAYER 4: NOW INDICATOR */}
+          {nowPos >= 0 && nowPos <= totalWidth && (
+            <div style={{
+              position: 'absolute',
+              left: `${nowPos}px`,
+              top: 0,
+              bottom: 0,
+              width: '2px',
+              backgroundColor: '#fff',
+              zIndex: 25,
+              boxShadow: '0 0 8px rgba(255,255,255,0.8)'
+            }}>
+              <div style={{
+                position: 'absolute',
+                top: '5px',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                backgroundColor: 'white',
+                color: '#111',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                whiteSpace: 'nowrap'
+              }}>
+                {formatTime(now)}
+              </div>
+            </div>
+          )}
+          
         </div>
-        <div style={{ width: '50vw', flexShrink: 0 }} /> 
       </div>
     </div>
   );
