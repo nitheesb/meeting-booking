@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Save, Link } from 'lucide-react';
 import { Room } from '../../types';
@@ -14,11 +13,20 @@ interface RoomConfigModalProps {
 export const RoomConfigModal: React.FC<RoomConfigModalProps> = ({ room, onSave, onClose }) => {
     const [name, setName] = useState(room.name);
     const [capacity, setCapacity] = useState(room.capacity);
-    const [calendarId, setCalendarId] = useState(room.calendarId || '');
-    const [apiKey, setApiKey] = useState(room.apiKey || '');
+    const [calendarId, setCalendarId] = useState(room.settings.googleCalendarId || '');
+    const [apiKey, setApiKey] = useState(room.settings.googleApiKey || '');
 
     const handleSave = () => {
-        onSave({ ...room, name, capacity, calendarId, apiKey });
+        onSave({ 
+            ...room, 
+            name, 
+            capacity, 
+            settings: {
+                ...room.settings,
+                googleCalendarId: calendarId,
+                googleApiKey: apiKey
+            }
+        });
         onClose();
     };
 

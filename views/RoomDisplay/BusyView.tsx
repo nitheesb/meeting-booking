@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { User, X, ChevronRight, AlertCircle } from 'lucide-react';
 import { Meeting } from '../../types';
@@ -17,7 +16,7 @@ export const BusyView: React.FC<BusyViewProps> = ({ meeting, nextMeeting, onEndE
     const [showExtendModal, setShowExtendModal] = useState(false);
 
     const maxExtendMins = nextMeeting 
-        ? (nextMeeting.startTime.getTime() - meeting.endTime.getTime()) / 60000 
+        ? (new Date(nextMeeting.startTime).getTime() - new Date(meeting.endTime).getTime()) / 60000 
         : 180;
 
     const options = [15, 30, 45, 60];

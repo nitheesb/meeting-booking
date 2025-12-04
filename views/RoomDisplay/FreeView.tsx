@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Meeting } from '../../types';
 import { THEME } from '../../constants';
@@ -12,7 +11,7 @@ interface FreeViewProps {
 export const FreeView: React.FC<FreeViewProps> = ({ nextMeeting, onBook }) => {
     const now = new Date();
     const minsUntilNext = nextMeeting 
-        ? (nextMeeting.startTime.getTime() - now.getTime()) / 60000 
+        ? (new Date(nextMeeting.startTime).getTime() - now.getTime()) / 60000 
         : 999;
 
     const options = [

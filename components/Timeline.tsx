@@ -2,235 +2,173 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Meeting } from '../types';
-import { THEME } from '../constants';
-import { formatTime } from '../utils';
+import { COLORS, CONFIG } from '../constants';
+import { formatTime, getMinutesFromStartOfDay } from '../utils';
 
 interface TimelineProps {
   schedule: Meeting[];
-  now: Date;
+  currentTime: Date;
 }
 
-// Configuration
-const START_HOUR = 7; // 7 AM
-const END_HOUR = 19;  // 7 PM
-const PX_PER_MIN = 4; // Width of 1 minute in pixels
-const MIN_BLOCK_WIDTH = 50; // Minimum width for text visibility
+export const Timeline: React.FC<TimelineProps> = ({ schedule, currentTime }) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [offset, setOffset] = useState(0); // For manual scrolling if needed, or just standard overflow
 
-export const Timeline: React.FC<TimelineProps> = ({ schedule, now }) => {
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const totalMinutes = (CONFIG.END_HOUR - CONFIG.START_HOUR) * 60;
+  const totalWidth = totalMinutes * CONFIG.PIXELS_PER_MINUTE;
 
-  // 1. Calculate dimensions
-  const totalMinutes = (END_HOUR - START_HOUR) * 60;
-  const totalWidth = totalMinutes * PX_PER_MIN;
+  // Auto-scroll to current time on mount/update
+  useEffect(() => {
+    if (scrollRef.current) {
+      const nowMinutes = getMinutesFromStartOfDay(currentTime, CONFIG.START_HOUR);
+      const centerPos = (nowMinutes * CONFIG.PIXELS_PER_MINUTE) - (window.innerWidth / 2);
+      scrollRef.current.scrollLeft = centerPos;
+    }
+  }, [currentTime]); // Re-center occasionally
 
-  // Helper: Convert Date to pixels relative to start of day
-  const getPosition = (date: Date) => {
-    const h = date.getHours();
-    const m = date.getMinutes();
-    const minutesSinceStart = (h * 60 + m) - (START_HOUR * 60);
-    return Math.max(0, minutesSinceStart * PX_PER_MIN);
+  const handleScroll = (direction: 'left' | 'right') => {
+    if (scrollRef.current) {
+      const amount = direction === 'left' ? -300 : 300;
+      scrollRef.current.scrollBy({ left: amount, behavior: 'smooth' });
+    }
   };
 
-  // 2. Generate Grid Lines (Every 30 mins)
-  const gridLines = [];
-  for (let i = 0; i <= totalMinutes; i += 30) {
-    const isHour = i % 60 === 0;
-    gridLines.push({
-      left: i * PX_PER_MIN,
-      label: isHour ? `${Math.floor(START_HOUR + i / 60).toString().padStart(2, '0')}:00` : null,
-      isHour
+  // Generate Grid Markers
+  const markers = [];
+  for (let i = 0; i <= totalMinutes; i += 15) {
+    markers.push({
+      left: i * CONFIG.PIXELS_PER_MINUTE,
+      isHour: i % 60 === 0,
+      label: i % 60 === 0 ? `${CONFIG.START_HOUR + (i / 60)}:00` : null
     });
   }
 
-  // 3. Auto-scroll logic
-  useEffect(() => {
-    // Only auto-scroll if the user hasn't touched the scroll recently
-    if (!isUserScrolling && scrollContainerRef.current) {
-      const currentPos = getPosition(now);
-      const containerWidth = scrollContainerRef.current.clientWidth;
-      // Center the view on "now"
-      scrollContainerRef.current.scrollTo({
-        left: currentPos - (containerWidth / 2),
-        behavior: 'smooth'
-      });
-    }
-  }, [now, isUserScrolling]);
-
-  const handleScroll = (direction: 'left' | 'right') => {
-    if (scrollContainerRef.current) {
-      setIsUserScrolling(true);
-      const amount = direction === 'left' ? -300 : 300;
-      scrollContainerRef.current.scrollBy({ left: amount, behavior: 'smooth' });
-      // Reset user scrolling flag after animation
-      setTimeout(() => setIsUserScrolling(false), 500);
-    }
-  };
-
-  const nowPos = getPosition(now);
+  // Calculate Current Time Line Position
+  const nowPx = getMinutesFromStartOfDay(currentTime, CONFIG.START_HOUR) * CONFIG.PIXELS_PER_MINUTE;
 
   return (
-    <div style={{ 
-      height: '140px', 
-      backgroundColor: '#111', 
-      borderTop: '1px solid #333', 
-      position: 'relative', 
-      display: 'flex', 
-      flexDirection: 'column', 
-      zIndex: 20 
-    }}>
+    <div style={{ position: 'relative', height: '140px', backgroundColor: '#000', borderTop: `1px solid ${COLORS.border}` }}>
       
-      {/* Scroll Controls */}
-      <button 
-        onClick={() => handleScroll('left')}
-        style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0, width: '50px',
-          backgroundColor: 'rgba(0,0,0,0.5)', border: 'none', color: 'white',
-          zIndex: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
+      {/* Scroll Buttons */}
+      <button onClick={() => handleScroll('left')} style={scrollBtnStyle('left')}>
         <ChevronLeft size={32} />
       </button>
-
-      <button 
-        onClick={() => handleScroll('right')}
-        style={{
-          position: 'absolute', right: 0, top: 0, bottom: 0, width: '50px',
-          backgroundColor: 'rgba(0,0,0,0.5)', border: 'none', color: 'white',
-          zIndex: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>
+      <button onClick={() => handleScroll('right')} style={scrollBtnStyle('right')}>
         <ChevronRight size={32} />
       </button>
 
-      {/* Scrollable Track */}
+      {/* Scrollable Area */}
       <div 
-        ref={scrollContainerRef}
-        className="timeline-scroll-area"
+        ref={scrollRef}
         style={{ 
-          flex: 1, 
           overflowX: 'auto', 
-          overflowY: 'hidden',
-          position: 'relative',
-          scrollbarWidth: 'none', // Firefox
-          msOverflowStyle: 'none' // IE/Edge
-        }}
-        onTouchStart={() => setIsUserScrolling(true)}
-      >
-        <style>{`.timeline-scroll-area::-webkit-scrollbar { display: none; }`}</style>
-        
-        <div style={{ 
-          width: `${totalWidth}px`, 
           height: '100%', 
           position: 'relative',
-          backgroundColor: THEME.green // BASE LAYER: GREEN (FREE)
-        }}>
-
-          {/* LAYER 2: GRID LINES */}
-          {gridLines.map((line, i) => (
-            <div key={i} style={{
+          scrollbarWidth: 'none',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        <div style={{ width: `${totalWidth}px`, height: '100%', position: 'relative', background: COLORS.green }}>
+          
+          {/* Layer 1: Grid Lines */}
+          {markers.map((m, idx) => (
+            <div key={idx} style={{
               position: 'absolute',
-              left: `${line.left}px`,
+              left: m.left,
               top: 0,
               bottom: 0,
-              width: '1px',
-              backgroundColor: 'rgba(0,0,0,0.15)',
-              borderRight: line.isHour ? '1px solid rgba(0,0,0,0.2)' : 'none'
+              width: 1,
+              backgroundColor: m.isHour ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.1)',
+              zIndex: 2
             }}>
-              {line.label && (
-                <div style={{
-                  position: 'absolute',
-                  bottom: '10px',
-                  left: '5px',
-                  fontSize: '14px',
-                  fontWeight: 600,
-                  color: 'rgba(255,255,255,0.9)',
-                  textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+              {m.label && (
+                <span style={{ 
+                  position: 'absolute', bottom: 8, left: 4, 
+                  color: 'white', fontWeight: 'bold', fontSize: '14px' 
                 }}>
-                  {line.label}
-                </div>
+                  {m.label}
+                </span>
               )}
             </div>
           ))}
 
-          {/* LAYER 3: MEETINGS (RED OVERLAY) */}
-          {schedule.map((meeting) => {
-            const startPx = getPosition(meeting.startTime);
-            const endPx = getPosition(meeting.endTime);
-            const width = Math.max(endPx - startPx, 2); // Ensure at least visible line
+          {/* Layer 2: Meetings */}
+          {schedule.map(meeting => {
+            const startMins = getMinutesFromStartOfDay(new Date(meeting.startTime), CONFIG.START_HOUR);
+            const endMins = getMinutesFromStartOfDay(new Date(meeting.endTime), CONFIG.START_HOUR);
             
-            // Don't render if outside our view range (07:00 - 19:00)
-            if (endPx < 0 || startPx > totalWidth) return null;
+            // Bounds checking
+            if (endMins < 0 || startMins > totalMinutes) return null;
+
+            const left = Math.max(0, startMins * CONFIG.PIXELS_PER_MINUTE);
+            const width = Math.max(0, (endMins * CONFIG.PIXELS_PER_MINUTE) - left);
 
             return (
               <div key={meeting.id} style={{
                 position: 'absolute',
-                left: `${startPx}px`,
-                width: `${width}px`,
+                left,
+                width,
                 top: 0,
                 bottom: 0,
-                backgroundColor: THEME.red,
-                borderLeft: '1px solid rgba(255,255,255,0.2)',
-                borderRight: '1px solid rgba(255,255,255,0.2)',
-                overflow: 'hidden',
+                backgroundColor: COLORS.red,
+                borderLeft: '1px solid rgba(255,255,255,0.3)',
+                borderRight: '1px solid rgba(255,255,255,0.3)',
+                zIndex: 5,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                zIndex: 10
+                overflow: 'hidden'
               }}>
-                {width > MIN_BLOCK_WIDTH && (
-                  <div style={{ 
-                    color: 'white', 
-                    fontSize: '12px', 
-                    fontWeight: 600, 
-                    whiteSpace: 'nowrap',
-                    textAlign: 'center',
-                    lineHeight: 1.2
-                  }}>
-                    {width > 120 ? (
-                      <>
-                        <div style={{ opacity: 0.9 }}>{meeting.title}</div>
-                        <div style={{ opacity: 0.7, fontSize: '10px' }}>{formatTime(meeting.startTime)} - {formatTime(meeting.endTime)}</div>
-                      </>
-                    ) : (
-                      <span>{formatTime(meeting.startTime)}</span>
-                    )}
-                  </div>
+                {width > 60 && (
+                   <div style={{ textAlign: 'center' }}>
+                     <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'white' }}>{formatTime(meeting.startTime)} - {formatTime(meeting.endTime)}</div>
+                     {width > 150 && <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.8)' }}>{meeting.title}</div>}
+                   </div>
                 )}
               </div>
             );
           })}
 
-          {/* LAYER 4: NOW INDICATOR */}
-          {nowPos >= 0 && nowPos <= totalWidth && (
+          {/* Layer 3: Now Indicator */}
+          {nowPx >= 0 && nowPx <= totalWidth && (
             <div style={{
               position: 'absolute',
-              left: `${nowPos}px`,
+              left: nowPx,
               top: 0,
               bottom: 0,
-              width: '2px',
-              backgroundColor: '#fff',
-              zIndex: 25,
-              boxShadow: '0 0 8px rgba(255,255,255,0.8)'
+              width: 2,
+              backgroundColor: 'white',
+              zIndex: 10,
+              boxShadow: '0 0 10px white'
             }}>
               <div style={{
-                position: 'absolute',
-                top: '5px',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                backgroundColor: 'white',
-                color: '#111',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                whiteSpace: 'nowrap'
+                position: 'absolute', top: 0, left: '-50%', transform: 'translateX(-40%)',
+                background: 'white', color: 'black', padding: '2px 6px',
+                fontSize: '12px', fontWeight: 'bold', borderRadius: '0 0 4px 4px'
               }}>
-                {formatTime(now)}
+                {formatTime(currentTime)}
               </div>
             </div>
           )}
-          
+
         </div>
       </div>
     </div>
   );
 };
+
+const scrollBtnStyle = (side: 'left' | 'right'): React.CSSProperties => ({
+  position: 'absolute',
+  [side]: 0,
+  top: 0,
+  bottom: 0,
+  width: '60px',
+  background: 'linear-gradient(to ' + (side === 'left' ? 'right' : 'left') + ', rgba(0,0,0,0.8), transparent)',
+  border: 'none',
+  color: 'white',
+  zIndex: 20,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer'
+});
